@@ -147,8 +147,12 @@
     .face { align-items: flex-start; text-align: left; }
   }
 
-  /* Gedimmt: Inhalt fast unsichtbar, der Himmel bleibt unverändert */
-  body.dimmed main, body.dimmed #fsBtn { opacity: .12; }
+  /* Gedimmt: Inhalt fast unsichtbar, Himmel und Sonne stark abgedunkelt */
+  #sky { transition: filter 1s; }
+  #night .face, #night .line, #night .foot, #fsBtn, #dial, #digital { transition: opacity 1s; }
+  body.dimmed #wakeLine, body.dimmed #night .foot, body.dimmed #fsBtn { opacity: .12; }
+  body.dimmed #dial, body.dimmed #digital { opacity: .3; }
+  body.dimmed #sky { filter: brightness(.3); }
 
   /* Alarm: gleiche Ansicht, andere Knöpfe */
   .alarm-only { display: none; }
@@ -160,6 +164,8 @@
 
   body.dawn { --text: #1d2140; --text-soft: rgba(29, 33, 64, .7); }
   body.dawn #fsBtn { border-color: rgba(29, 33, 64, .3); }
+  /* Im gedimmten Zustand bleibt die Schrift hell, weil der Himmel dunkel bleibt */
+  body.dimmed.dawn, body.dimmed { --text: var(--moon); --text-soft: var(--moon-dim); }
 </style>
 </head>
 <body>
@@ -192,7 +198,7 @@
 
   <section id="night" class="screen">
     <div class="face">
-      <svg id="dial" viewBox="-100 -100 200 200" role="img" aria-label="Uhr">
+      <svg id="dial" viewBox="-104 -104 208 208" role="img" aria-label="Uhr">
         <circle r="96" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1.5"/>
         <g id="ticks" stroke="currentColor" stroke-linecap="round"></g>
         <g id="numbers" fill="currentColor" font-family="Fraunces, Georgia, serif" font-size="17" text-anchor="middle" dominant-baseline="central" opacity=".8"></g>
@@ -435,7 +441,6 @@
         state.ringing = true; save();
         show('alarm'); startAlarm();
       }
-      if (left > 0 && left < dawnMs) document.body.classList.remove('dimmed');
     } else {
       paintSky(0); placeSun(sunPx + 60);
     }

@@ -1,18 +1,42 @@
-const CACHE = 'morgenrot-v3';
-const FILES = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'morgenrot-v8';
+const CORE = ['./', 'index.html'];
+const EXTRA = ['manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
+
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    await c.addAll(CORE);                                        // ohne die Seite selbst geht offline nichts
+    await Promise.all(EXTRA.map(f => c.add(f).catch(() => {})));  // fehlende Icons brechen die Installation nicht ab
+    await self.skipWaiting();
+  })());
 });
+
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
+
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      const copy = res.clone();
-      if (res.ok && new URL(e.request.url).origin === location.origin) caches.open(CACHE).then(c => c.put(e.request, copy));
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  e.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    const hit = await cache.match(req, { ignoreSearch: true });
+    if (hit) {
+      // Im Hintergrund aktualisieren, wenn Internet da ist
+      e.waitUntil(fetch(req).then(res => { if (res.ok) return cache.put(req, res); }).catch(() => {}));
+      return hit;
+    }
+    try {
+      const res = await fetch(req);
+      if (res.ok && (new URL(req.url).origin === location.origin || req.url.startsWith('https://fonts.'))) cache.put(req, res.clone());
       return res;
-    }).catch(() => caches.match('index.html')))
-  );
+    } catch (err) {
+      if (req.mode === 'navigate') return (await cache.match('index.html')) || (await cache.match('./'));
+      return new Response('', { status: 504 });
+    }
+  })());
 });
