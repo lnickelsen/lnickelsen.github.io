@@ -21,13 +21,15 @@
     --night-ink: #04060f;
     --moon: #c9cfe6;
     --moon-dim: rgba(201, 207, 230, .55);
-    --hill: #03050b;
+    --ground: #03050b;
     --sun: #ffcf8a;
-    --rose: #e9867a;
     --text: var(--moon);
     --text-soft: var(--moon-dim);
     --serif: "Fraunces", "Iowan Old Style", "Palatino", Georgia, serif;
     --sans: -apple-system, "Segoe UI", system-ui, sans-serif;
+    --horizon: 22%;           /* Höhe des Bodens; die Sonnenunterkante trifft genau diese Linie */
+    --sun-size: min(34vmin, 260px);
+    --sun-x: 50%;
     box-sizing: border-box;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -36,9 +38,10 @@
   /* Die App ist für die Nacht gemacht: hell und dunkel nutzen dieselbe gedämpfte Palette. */
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --moon: #c9cfe6; } }
   :root[data-theme="dark"] { --moon: #c9cfe6; }
+  @media (orientation: landscape) { :root { --sun-x: 70%; } }
 
   *, *::before, *::after { box-sizing: inherit; }
-  html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+  html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); background: var(--night-ink); }
   body {
     height: 100%; margin: 0; overflow: hidden;
     background: var(--night-ink); color: var(--text);
@@ -47,59 +50,78 @@
     -webkit-user-select: none; user-select: none;
   }
 
-  /* ---------- Himmel ---------- */
-  #sky { position: fixed; inset: 0; z-index: 0; overflow: hidden; transition: background 2s linear; }
-  #stars { position: absolute; inset: 0; transition: opacity 2s linear; }
+  /* ---------- Himmel und Landschaft ---------- */
+  #sky { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: var(--night-ink); }
+  #stars { position: absolute; inset: 0; }
   .star { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; }
   #glow {
-    position: absolute; left: 50%; bottom: 18%; width: 160vmax; height: 80vmax;
+    position: absolute; left: var(--sun-x); bottom: var(--horizon); width: 160vmax; height: 80vmax;
     transform: translate(-50%, 50%);
-    background: radial-gradient(closest-side, rgba(255, 190, 130, .9), rgba(233, 134, 122, .35) 45%, transparent 75%);
-    opacity: 0; transition: opacity 2s linear;
+    background: radial-gradient(closest-side, rgba(255, 190, 130, .85), rgba(233, 134, 122, .3) 45%, transparent 75%);
+    opacity: 0;
+  }
+  #sunWrap {
+    position: absolute; left: var(--sun-x); bottom: var(--horizon);
+    width: var(--sun-size); height: var(--sun-size);
+    transform: translateX(-50%);
   }
   #sun {
-    position: absolute; left: 50%; bottom: 18%;
-    width: min(34vmin, 260px); aspect-ratio: 1; border-radius: 50%;
+    width: 100%; height: 100%; border-radius: 50%;
     background: radial-gradient(circle at 50% 45%, #fff3d6, var(--sun) 55%, #f4a66a);
-    box-shadow: 0 0 80px 30px rgba(255, 190, 120, .45);
-    transform: translate(-50%, 110%); transition: transform 2s linear;
+    box-shadow: 0 0 40px 8px rgba(255, 190, 120, .35);
+    transform: translateY(calc(100% + 60px));
+    will-change: transform;
   }
-  #hill { position: absolute; left: 0; right: 0; bottom: 0; height: 24%; width: 100%; }
+  #ground { position: absolute; left: 0; right: 0; bottom: 0; height: var(--horizon); background: var(--ground); }
+  .hill { position: absolute; bottom: calc(var(--horizon) - 1px); height: 7%; fill: var(--ground); }
+  #hillL { left: 0; width: 26%; }
+  #hillR { right: 0; width: 16%; }
 
   /* ---------- Inhalt ---------- */
   main {
     position: relative; z-index: 1; height: 100%;
     display: flex; flex-direction: column;
-    padding: 4vh max(6vw, 24px) 0;
+    padding: 3vh max(5vw, 24px) 0;
+    transition: opacity 1s;
   }
-  .screen { display: none; flex: 1; flex-direction: column; }
+  .screen { display: none; flex: 1; flex-direction: column; min-height: 0; }
   .screen.on { display: flex; }
 
-  .clock-now { font-size: 15px; color: var(--text-soft); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
-
-  .big {
-    font-family: var(--serif); font-weight: 200;
-    font-size: clamp(88px, 22vmin, 220px); line-height: .9;
-    font-variation-settings: "opsz" 144;
-    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
-    margin: 0;
+  #fsBtn {
+    position: fixed; z-index: 2; right: max(4vw, 16px);
+    top: calc(env(safe-area-inset-top, 0px) + 2vh);
+    font-size: 15px; padding: 10px 18px; min-height: 44px;
+    border-color: rgba(201, 207, 230, .18); color: var(--text-soft);
   }
-  .big small { font-size: .32em; font-weight: 400; letter-spacing: 0; margin-left: .15em; color: var(--text-soft); }
-  .line { font-family: var(--serif); font-size: clamp(20px, 3.4vmin, 30px); color: var(--text-soft); margin: .6em 0 0; }
+
+  .line { font-family: var(--serif); font-size: clamp(18px, 3vmin, 26px); color: var(--text-soft); margin: .4em 0 0; }
 
   /* Einrichtung */
-  #setup { justify-content: center; max-width: 34rem; }
-  #setup label { font-family: var(--serif); font-size: clamp(22px, 3.6vmin, 32px); color: var(--text-soft); }
+  #setup { justify-content: center; max-width: 36rem; padding-bottom: calc(var(--horizon) + 2vh); }
+  .field-label { font-family: var(--serif); font-size: clamp(22px, 3.6vmin, 32px); color: var(--text-soft); display: block; }
   #wakeInput {
-    font: inherit; font-family: var(--serif); font-weight: 200;
-    font-size: clamp(88px, 22vmin, 200px); line-height: 1;
-    color: var(--text); background: transparent; border: 0; padding: 0; margin: .1em 0 .2em;
-    width: 100%; max-width: 6ch; font-variant-numeric: tabular-nums;
-    border-bottom: 1px solid rgba(201, 207, 230, .2);
+    font-family: var(--serif); font-weight: 200;
+    font-size: clamp(80px, 18vmin, 180px); line-height: 1;
+    color: var(--text); background: transparent; border: 0; padding: 0; margin: .05em 0 .4em;
+    width: auto; min-width: 5.2ch; max-width: 100%; font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid rgba(201, 207, 230, .2); border-radius: 0;
   }
   #wakeInput::-webkit-date-and-time-value { text-align: left; }
-  #wakeInput::-webkit-calendar-picker-indicator { filter: invert(.8); opacity: .5; }
-  #setupInfo { color: var(--text-soft); font-size: 16px; line-height: 1.5; margin: 0 0 2em; min-height: 1.5em; }
+  #wakeInput::-webkit-calendar-picker-indicator { display: none; }
+  .dawn-row { display: flex; align-items: baseline; gap: .4em; font-family: var(--serif); font-size: clamp(22px, 3.6vmin, 32px); color: var(--text-soft); margin-bottom: 1.2em; flex-wrap: wrap; }
+  #dawnInput {
+    font: inherit; color: var(--text); background: transparent; border: 0;
+    border-bottom: 1px solid rgba(201, 207, 230, .3); border-radius: 0;
+    width: 3.2ch; text-align: center; padding: 0 0 2px; font-variant-numeric: tabular-nums;
+  }
+  .days { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.4em; }
+  .days button {
+    min-width: 52px; min-height: 48px; padding: 10px 0; font-size: 17px;
+    border-color: rgba(201, 207, 230, .25); color: var(--moon-dim);
+  }
+  .days button[aria-pressed="true"] { background: rgba(201, 207, 230, .16); border-color: var(--moon); color: var(--moon); font-weight: 600; }
+  .tap-hint { font-family: var(--serif); font-size: clamp(18px, 3vmin, 24px); color: var(--moon); margin: 0; text-align: center; width: 100%; }
+  #setupInfo { color: var(--text-soft); font-size: 16px; line-height: 1.5; margin: 0 0 1.6em; max-width: 32rem; }
 
   button {
     font: inherit; font-size: 18px; cursor: pointer;
@@ -107,117 +129,169 @@
     border: 1px solid rgba(201, 207, 230, .35); background: transparent; color: var(--text);
   }
   button.primary { background: var(--moon); color: var(--night-ink); border-color: transparent; font-weight: 600; }
-  button:focus-visible { outline: 2px solid var(--sun); outline-offset: 3px; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--sun); outline-offset: 3px; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; }
 
-  /* Nacht */
+  /* Nacht: Uhr oben, Knöpfe unten auf dem Boden */
   #night { justify-content: space-between; }
-  #night .center { margin-top: 10vh; }
-  #night .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 3vh; }
-  #night .foot button { font-size: 15px; padding: 10px 18px; min-height: 44px; border-color: rgba(201, 207, 230, .18); color: var(--text-soft); }
-  #lockNote { font-size: 13px; color: var(--text-soft); max-width: 22rem; line-height: 1.4; }
+  .face { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 2vh; }
+  #dial { width: min(44vmin, 380px); height: auto; color: var(--text); }
+  #digital {
+    font-family: var(--serif); font-weight: 200; margin: .1em 0 0;
+    font-size: clamp(56px, 11vmin, 110px); line-height: 1;
+    font-variation-settings: "opsz" 144; font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+  }
+  #night .foot { display: flex; justify-content: flex-end; gap: 12px; padding-bottom: 3vh; }
+  #night .foot button { font-size: 15px; padding: 10px 18px; min-height: 44px; border-color: rgba(201, 207, 230, .18); color: var(--moon-dim); }
+  @media (orientation: landscape) {
+    .face { align-items: flex-start; text-align: left; }
+  }
 
-  /* Gedimmt: nur noch die Restzeit, ganz schwach */
-  body.dimmed main { opacity: .18; transition: opacity 1s; }
-  body.dimmed #sky { filter: brightness(.35); }
+  /* Gedimmt: Inhalt fast unsichtbar, der Himmel bleibt unverändert */
+  body.dimmed main, body.dimmed #fsBtn { opacity: .12; }
 
-  /* Alarm */
-  #alarm { justify-content: center; align-items: flex-start; }
-  #alarm .big { color: #1d2140; }
-  #alarm .line { color: rgba(29, 33, 64, .75); }
-  #alarm button { border-color: rgba(29, 33, 64, .4); color: #1d2140; }
-  #alarm button.primary { background: #1d2140; color: #ffe9c7; }
-  #alarm .row { margin-top: 2.5em; }
+  /* Alarm: gleiche Ansicht, andere Knöpfe */
+  .alarm-only { display: none; }
+  body.ringing .alarm-only { display: block; }
+  body.ringing { cursor: pointer; }
+  body.ringing .night-only { display: none; }
+  body.ringing #night .foot button { font-size: 18px; padding: 16px 28px; min-height: 52px; border-color: rgba(201, 207, 230, .35); color: var(--moon); }
+  body.ringing #night .foot button.primary { background: var(--moon); color: var(--night-ink); border-color: transparent; font-weight: 600; }
 
   body.dawn { --text: #1d2140; --text-soft: rgba(29, 33, 64, .7); }
-  body.dawn #night .foot button { border-color: rgba(29, 33, 64, .3); }
-
-  @media (prefers-reduced-motion: reduce) {
-    #sky, #sun, #glow, #stars { transition: none; }
-  }
-  @media (orientation: landscape) and (max-height: 600px) {
-    #night .center { margin-top: 2vh; }
-  }
+  body.dawn #fsBtn { border-color: rgba(29, 33, 64, .3); }
 </style>
 </head>
 <body>
 <div id="sky" aria-hidden="true">
   <div id="stars"></div>
   <div id="glow"></div>
-  <div id="sun"></div>
-  <svg id="hill" viewBox="0 0 100 24" preserveAspectRatio="none">
-    <path d="M0 9 C 14 4, 26 6, 38 8 S 62 3, 74 6 S 92 8, 100 5 L100 24 L0 24 Z" fill="#03050b"/>
-  </svg>
+  <div id="sunWrap"><div id="sun"></div></div>
+  <svg id="hillL" class="hill" viewBox="0 0 100 10" preserveAspectRatio="none"><path d="M0 0 C 30 0, 55 3, 100 10 L0 10 Z"/></svg>
+  <svg id="hillR" class="hill" viewBox="0 0 100 10" preserveAspectRatio="none"><path d="M0 10 C 40 6, 70 3, 100 2 L100 10 Z"/></svg>
+  <div id="ground"></div>
 </div>
 
+<button id="fsBtn" hidden>Vollbild</button>
+
 <main>
-  <section id="setup" class="screen" aria-labelledby="setupLabel">
-    <label id="setupLabel" for="wakeInput">Aufstehen um</label>
+  <section id="setup" class="screen">
+    <label class="field-label" for="wakeInput">Aufstehen um</label>
     <input id="wakeInput" type="time" value="06:30" required>
+    <div class="dawn-row">
+      <label for="dawnInput">Sonnenaufgang dauert</label>
+      <input id="dawnInput" type="number" inputmode="numeric" min="1" max="240" step="1" value="60">
+      <span>Minuten</span>
+    </div>
+    <div class="days" role="group" aria-label="Aktiv an diesen Wochentagen">
+      <button type="button" data-day="1">Mo</button><button type="button" data-day="2">Di</button><button type="button" data-day="3">Mi</button><button type="button" data-day="4">Do</button><button type="button" data-day="5">Fr</button><button type="button" data-day="6">Sa</button><button type="button" data-day="0">So</button>
+    </div>
     <p id="setupInfo"></p>
     <div class="row"><button id="startBtn" class="primary">Wecker stellen</button></div>
   </section>
 
-  <section id="night" class="screen" aria-live="off">
-    <div class="clock-now" id="nowClock"></div>
-    <div class="center">
-      <p class="big" id="remaining"></p>
+  <section id="night" class="screen">
+    <div class="face">
+      <svg id="dial" viewBox="-100 -100 200 200" role="img" aria-label="Uhr">
+        <circle r="96" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1.5"/>
+        <g id="ticks" stroke="currentColor" stroke-linecap="round"></g>
+        <g id="numbers" fill="currentColor" font-family="Fraunces, Georgia, serif" font-size="17" text-anchor="middle" dominant-baseline="central" opacity=".8"></g>
+        <circle id="wakeMark" r="6" fill="#ffcf8a"/>
+        <line id="hourHand" x1="0" y1="8" x2="0" y2="-46" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+        <line id="minHand" x1="0" y1="10" x2="0" y2="-70" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+        <circle r="5" fill="currentColor"/>
+      </svg>
+      <p id="digital"></p>
       <p class="line" id="wakeLine"></p>
     </div>
     <div class="foot">
-      <span id="lockNote">iPad am Ladekabel lassen und die App offen. Bei gesperrtem Bildschirm klingelt kein Web-Wecker.</span>
-      <div class="row">
-        <button id="dimBtn">Dimmen</button>
-        <button id="cancelBtn">Wecker beenden</button>
-      </div>
+      <button id="dimBtn" class="night-only">Dimmen</button>
+      <button id="cancelBtn" class="night-only">Wecker beenden</button>
+      <p class="alarm-only tap-hint">Tippe irgendwo auf den Bildschirm, um den Wecker auszuschalten.</p>
     </div>
   </section>
 
-  <section id="alarm" class="screen" role="alert">
-    <p class="big">Guten Morgen</p>
-    <p class="line" id="alarmLine"></p>
-    <div class="row">
-      <button id="offBtn" class="primary">Wecker aus</button>
-      <button id="snoozeBtn">5 Min. schlummern</button>
-    </div>
-  </section>
 </main>
 
 <script>
 (() => {
   const $ = id => document.getElementById(id);
   const KEY = 'morgenrot-state';
-  const SNOOZE_MIN = 5;
-  let state = { wake: '06:30', start: null, target: null, ringing: false };
+  let state = { wake: '06:30', dawnMin: 60, days: [1, 2, 3, 4, 5], target: null, ringing: false, morningUntil: 0 };
+  const MORNING_MIN = 30;      // so lange bleibt der Morgenhimmel nach dem Ausschalten
+  const MISSED_MAX_MIN = 60;   // verpasste Wecker, die älter sind, werden still übersprungen
+  const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
   let audioCtx = null, alarmTimer = null, alarmStarted = 0, wakeLock = null;
+  let lastSecond = -1, lastSunY = null, lastSky = null, sunPx = 0;
 
   // ---------- Speicher ----------
   function load() {
     try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.wake) state = Object.assign(state, s); } catch (e) {}
+    if (!(state.dawnMin >= 1)) state.dawnMin = 60;
+    if (!Array.isArray(state.days)) state.days = [1, 2, 3, 4, 5];
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
 
   // ---------- Zeit ----------
   const pad = n => String(n).padStart(2, '0');
   const hhmm = d => pad(d.getHours()) + ':' + pad(d.getMinutes());
-  function nextOccurrence(t) {
+  function nextOccurrence(t, days) {
     const [h, m] = t.split(':').map(Number);
-    const d = new Date(); d.setHours(h, m, 0, 0);
-    if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
-    return d.getTime();
+    for (let i = 0; i <= 7; i++) {
+      const d = new Date(); d.setDate(d.getDate() + i); d.setHours(h, m, 0, 0);
+      if (d.getTime() > Date.now() && days.includes(d.getDay())) return d.getTime();
+    }
+    return null;
+  }
+  function dayLabel(ts) {
+    const d = new Date(ts), today = new Date(); today.setHours(0, 0, 0, 0);
+    const diff = Math.round((new Date(d).setHours(0, 0, 0, 0) - today) / 86400000);
+    if (diff === 0) return 'heute';
+    if (diff === 1) return 'morgen';
+    return 'am ' + DAY_NAMES[d.getDay()];
+  }
+  function selectedDays() {
+    return [...document.querySelectorAll('.days button')].filter(b => b.getAttribute('aria-pressed') === 'true').map(b => Number(b.dataset.day));
   }
   function durationText(ms) {
-    const totalMin = Math.round(ms / 60000);
-    const h = Math.floor(totalMin / 60), m = totalMin % 60;
-    if (h === 0) return m + ' Minuten';
-    return h + ' Std. ' + (m ? m + ' Min.' : '');
-  }
-  function remainingHTML(ms) {
-    if (ms < 60000) return Math.ceil(ms / 1000) + '<small>Sek.</small>';
     const totalMin = Math.ceil(ms / 60000);
-    const h = Math.floor(totalMin / 60), m = totalMin % 60;
-    if (h === 0) return m + '<small>Min.</small>';
-    return h + ':' + pad(m) + '<small>Std.</small>';
+    const days = Math.floor(totalMin / 1440), h = Math.floor(totalMin % 1440 / 60), m = totalMin % 60;
+    if (days > 0) return days + (days === 1 ? ' Tag' : ' Tage') + (h ? ' ' + h + ' Std.' : '');
+    if (h === 0) return m + ' Min.';
+    return h + ' Std.' + (m ? ' ' + m + ' Min.' : '');
+  }
+  function dawnMinutes() {
+    const v = parseInt($('dawnInput').value, 10);
+    return Math.min(240, Math.max(1, isNaN(v) ? 60 : v));
+  }
+
+  // ---------- Ziffernblatt ----------
+  function buildDial() {
+    const ticks = $('ticks'), nums = $('numbers'), NS = 'http://www.w3.org/2000/svg';
+    for (let i = 0; i < 60; i++) {
+      const a = i * 6 * Math.PI / 180, big = i % 5 === 0;
+      const r1 = big ? 84 : 89, r2 = 93;
+      const l = document.createElementNS(NS, 'line');
+      l.setAttribute('x1', (Math.sin(a) * r1).toFixed(2)); l.setAttribute('y1', (-Math.cos(a) * r1).toFixed(2));
+      l.setAttribute('x2', (Math.sin(a) * r2).toFixed(2)); l.setAttribute('y2', (-Math.cos(a) * r2).toFixed(2));
+      l.setAttribute('stroke-width', big ? 2.5 : 1); l.setAttribute('stroke-opacity', big ? .8 : .35);
+      ticks.appendChild(l);
+    }
+    for (let h = 1; h <= 12; h++) {
+      const a = h * 30 * Math.PI / 180, t = document.createElementNS(NS, 'text');
+      t.setAttribute('x', (Math.sin(a) * 70).toFixed(2)); t.setAttribute('y', (-Math.cos(a) * 70).toFixed(2));
+      t.textContent = h; nums.appendChild(t);
+    }
+  }
+  function setDial(d) {
+    const h = d.getHours() % 12, m = d.getMinutes(), s = d.getSeconds();
+    $('hourHand').setAttribute('transform', `rotate(${(h + m / 60) * 30})`);
+    $('minHand').setAttribute('transform', `rotate(${(m + s / 60) * 6})`);
+    const w = state.target ? new Date(state.target) : null;
+    const [wh, wm] = w ? [w.getHours(), w.getMinutes()] : state.wake.split(':').map(Number);
+    const a = ((wh % 12) + wm / 60) * 30 * Math.PI / 180;
+    $('wakeMark').setAttribute('cx', (Math.sin(a) * 96).toFixed(2));
+    $('wakeMark').setAttribute('cy', (-Math.cos(a) * 96).toFixed(2));
   }
 
   // ---------- Himmel ----------
@@ -226,21 +300,34 @@
   const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
   const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
 
-  function paintSky(progress) {
-    // Lange ruhige Nacht, die Dämmerung beginnt im letzten Drittel.
-    const p = Math.min(1, Math.max(0, progress));
-    const dawn = Math.pow(Math.max(0, (p - 0.66) / 0.34), 1.3);
-    const top = mix(NIGHT[0], DAWN[0], dawn), mid = mix(NIGHT[1], DAWN[1], dawn), bot = mix(NIGHT[2], DAWN[2], dawn);
-    $('sky').style.background = `linear-gradient(to bottom, ${rgb(top)} 0%, ${rgb(mid)} 55%, ${rgb(bot)} 82%)`;
-    $('stars').style.opacity = String(1 - dawn);
-    $('glow').style.opacity = String(Math.min(1, dawn * 1.2));
-    // Sonne: von tief unter dem Horizont bis knapp darüber
-    const y = 110 - 150 * Math.pow(p, 2.2);
-    $('sun').style.transform = `translate(-50%, ${y}%)`;
-    document.body.classList.toggle('dawn', dawn > 0.55);
+  function paintSky(p) {
+    const key = Math.round(p * 500);
+    if (key === lastSky) return;
+    lastSky = key;
+    const top = mix(NIGHT[0], DAWN[0], p), mid = mix(NIGHT[1], DAWN[1], p), bot = mix(NIGHT[2], DAWN[2], p);
+    $('sky').style.background = `linear-gradient(to bottom, ${rgb(top)} 0%, ${rgb(mid)} 55%, ${rgb(bot)} 78%)`;
+    $('stars').style.opacity = String(1 - p);
+    $('glow').style.opacity = String(Math.min(1, p * 1.2));
+    document.body.classList.toggle('dawn', p > 0.6);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = rgb(top);
   }
+
+  // Sonnen-Versatz in Pixeln nach unten: Größe = ganz versteckt, 0 = Unterkante liegt exakt auf dem Horizont.
+  function sunOffsetPx(left, dawnMs) {
+    if (left >= dawnMs) return sunPx + 60; // ganz versteckt, auch der Schein
+    if (left > 0) return sunPx * left / dawnMs;
+    // Nach der Weckzeit steigt die Sonne weiter, damit die Lücke deutlich sichtbar wird.
+    return -Math.min(sunPx * 0.4, sunPx * 0.15 * (-left) / 60000);
+  }
+  function placeSun(y) {
+    // Auf 0,1 px abrunden, aber niemals so, dass eine Lücke erscheint, bevor die Weckzeit erreicht ist.
+    const r = y >= 0 ? Math.floor(y * 10) / 10 : Math.ceil(y * 10) / 10;
+    if (r === lastSunY) return;
+    lastSunY = r;
+    $('sun').style.transform = `translateY(${r}px)`;
+  }
+  function measureSun() { sunPx = $('sunWrap').getBoundingClientRect().height; lastSunY = null; }
 
   function makeStars() {
     const box = $('stars');
@@ -248,9 +335,9 @@
       const s = document.createElement('span');
       s.className = 'star';
       s.style.left = Math.random() * 100 + '%';
-      s.style.top = Math.random() * 72 + '%';
+      s.style.top = Math.random() * 70 + '%';
       s.style.opacity = (0.15 + Math.random() * 0.6).toFixed(2);
-      if (Math.random() < 0.15) { s.style.width = s.style.height = '3px'; }
+      if (Math.random() < 0.15) s.style.width = s.style.height = '3px';
       box.appendChild(s);
     }
   }
@@ -258,19 +345,33 @@
   // ---------- Bildschirm wach halten ----------
   async function requestWakeLock() {
     try {
-      if ('wakeLock' in navigator && document.visibilityState === 'visible') {
-        wakeLock = await navigator.wakeLock.request('screen');
-      }
+      if ('wakeLock' in navigator && document.visibilityState === 'visible') wakeLock = await navigator.wakeLock.request('screen');
     } catch (e) { wakeLock = null; }
   }
   function releaseWakeLock() { try { wakeLock && wakeLock.release(); } catch (e) {} wakeLock = null; }
+
+  // ---------- Vollbild ----------
+  const root = document.documentElement;
+  const fsRequest = root.requestFullscreen || root.webkitRequestFullscreen;
+  const fsExit = document.exitFullscreen || document.webkitExitFullscreen;
+  const isFS = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if (fsRequest && (document.fullscreenEnabled || document.webkitFullscreenEnabled)) $('fsBtn').hidden = false;
+  function updateFsLabel() { $('fsBtn').textContent = isFS() ? 'Vollbild beenden' : 'Vollbild'; setTimeout(measureSun, 300); }
+  $('fsBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    try {
+      const r = isFS() ? fsExit.call(document) : fsRequest.call(root);
+      if (r && r.catch) r.catch(() => {});
+    } catch (err) {}
+  });
+  document.addEventListener('fullscreenchange', updateFsLabel);
+  document.addEventListener('webkitfullscreenchange', updateFsLabel);
 
   // ---------- Ton ----------
   function unlockAudio() {
     try {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === 'suspended') audioCtx.resume();
-      // stummer Ton, damit iOS den Audio-Kanal freigibt
       const b = audioCtx.createBuffer(1, 1, 22050), s = audioCtx.createBufferSource();
       s.buffer = b; s.connect(audioCtx.destination); s.start(0);
     } catch (e) {}
@@ -278,8 +379,7 @@
   function chime() {
     if (!audioCtx) return;
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    // Lautstärke steigt über 60 Sekunden sanft an
-    const vol = Math.min(0.9, 0.08 + (Date.now() - alarmStarted) / 60000 * 0.8);
+    const vol = Math.min(0.9, 0.1 + (Date.now() - alarmStarted) / 60000 * 0.8);
     const now = audioCtx.currentTime;
     [523.25, 659.25, 783.99].forEach((f, i) => {
       const o = audioCtx.createOscillator(), g = audioCtx.createGain();
@@ -302,95 +402,122 @@
 
   // ---------- Bildschirme ----------
   function show(id) {
-    ['setup', 'night', 'alarm'].forEach(s => $(s).classList.toggle('on', s === id));
-    if (id !== 'night') document.body.classList.remove('dimmed');
+    const ringing = id === 'alarm';
+    if (ringing) id = 'night';
+    ['setup', 'night'].forEach(s => $(s).classList.toggle('on', s === id));
+    document.body.classList.toggle('ringing', ringing);
+    if (ringing || id !== 'night') document.body.classList.remove('dimmed');
+    if (ringing) $('wakeLine').textContent = 'Die Sonne ist aufgegangen. Zeit zum Aufstehen!';
   }
-
   function updateSetupInfo() {
-    const t = nextOccurrence($('wakeInput').value || state.wake);
-    $('setupInfo').textContent = 'Noch ' + durationText(t - Date.now()) + ' Schlaf, wenn du jetzt startest.';
+    const days = selectedDays();
+    if (!days.length) { $('setupInfo').textContent = 'Wähle mindestens einen Wochentag aus.'; return; }
+    const t = nextOccurrence($('wakeInput').value || state.wake, days);
+    const startDawn = new Date(t - dawnMinutes() * 60000);
+    $('setupInfo').textContent = 'Nächster Wecker ' + dayLabel(t) + ' um ' + hhmm(new Date(t)) + ' Uhr, ab ' + hhmm(startDawn) +
+      ' Uhr wird es hell. Das iPad über Nacht am Ladekabel und die App offen lassen.';
   }
 
-  function tick() {
+  // ---------- Hauptschleife ----------
+  function frame() {
     const now = Date.now();
-    $('nowClock').textContent = hhmm(new Date(now));
-    if (!state.target) { paintSky(0); updateSetupInfo(); return; }
-
-    const left = state.target - now;
-    const progress = (now - state.start) / (state.target - state.start);
-    paintSky(progress);
-
-    if (left <= 0) {
-      if (!state.ringing) { state.ringing = true; save(); }
-      $('alarmLine').textContent = 'Es ist ' + hhmm(new Date(now)) + '.';
-      if (!$('alarm').classList.contains('on')) show('alarm');
-      startAlarm();
-      return;
+    if (state.target && !state.ringing && state.target - now < -MISSED_MAX_MIN * 60000) {
+      // App war zur Weckzeit nicht offen: nicht nachträglich klingeln, sondern den nächsten Termin nehmen
+      state.target = nextOccurrence(state.wake, state.days); save();
     }
-    $('remaining').innerHTML = remainingHTML(left);
-    $('wakeLine').textContent = 'bis ' + hhmm(new Date(state.target));
+    if (state.target && state.morningUntil > now && !state.ringing) {
+      paintSky(1); placeSun(-sunPx * 0.4);
+    } else if (state.target) {
+      const left = state.target - now, dawnMs = state.dawnMin * 60000;
+      paintSky(Math.min(1, Math.max(0, 1 - left / dawnMs)));
+      placeSun(sunOffsetPx(left, dawnMs));
+      if (left <= 0 && !alarmTimer) {
+        state.ringing = true; save();
+        show('alarm'); startAlarm();
+      }
+      if (left > 0 && left < dawnMs) document.body.classList.remove('dimmed');
+    } else {
+      paintSky(0); placeSun(sunPx + 60);
+    }
+
+    const sec = Math.floor(now / 1000);
+    if (sec !== lastSecond) {
+      lastSecond = sec;
+      const d = new Date(now);
+      setDial(d);
+      $('digital').textContent = hhmm(d);
+      if (state.target && state.target > now) {
+        const next = 'Nächster Wecker ' + dayLabel(state.target) + ' um ' + hhmm(new Date(state.target)) + ', noch ' + durationText(state.target - now);
+        $('wakeLine').textContent = state.morningUntil > now ? 'Guten Morgen! ' + next : next;
+      }
+      if (!state.target) updateSetupInfo();
+    }
   }
+  function loop() { frame(); requestAnimationFrame(loop); }
 
   // ---------- Aktionen ----------
   $('startBtn').addEventListener('click', () => {
     const v = $('wakeInput').value;
     if (!v) { $('setupInfo').textContent = 'Bitte eine Uhrzeit eintragen.'; return; }
     unlockAudio();
-    state.wake = v; state.start = Date.now(); state.target = nextOccurrence(v); state.ringing = false;
-    save(); requestWakeLock(); show('night'); tick();
+    const days = selectedDays();
+    if (!days.length) { $('setupInfo').textContent = 'Wähle mindestens einen Wochentag aus.'; return; }
+    state.wake = v; state.days = days; state.dawnMin = dawnMinutes(); $('dawnInput').value = state.dawnMin;
+    state.target = nextOccurrence(v, days); state.ringing = false; state.morningUntil = 0;
+    save(); requestWakeLock(); show('night'); frame();
   });
-
   $('cancelBtn').addEventListener('click', () => {
-    state.start = state.target = null; state.ringing = false;
-    save(); releaseWakeLock(); show('setup'); tick();
+    state.target = null; state.ringing = false; state.morningUntil = 0;
+    save(); releaseWakeLock(); show('setup'); frame();
   });
-
   $('dimBtn').addEventListener('click', e => { e.stopPropagation(); document.body.classList.add('dimmed'); });
   document.addEventListener('click', e => {
     if (document.body.classList.contains('dimmed') && e.target.id !== 'dimBtn') document.body.classList.remove('dimmed');
   });
-
-  $('offBtn').addEventListener('click', () => {
+  // Ein Tipp irgendwo beendet das Klingeln und stellt sofort den nächsten Wecker.
+  function stopAndRearm(e) {
+    if (!state.ringing && !alarmTimer) return;
+    e.preventDefault(); e.stopPropagation();
     stopAlarm();
-    state.start = state.target = null; state.ringing = false;
-    save(); releaseWakeLock(); show('setup'); tick();
-  });
-
-  $('snoozeBtn').addEventListener('click', () => {
-    stopAlarm(); unlockAudio();
-    state.start = Date.now(); state.target = Date.now() + SNOOZE_MIN * 60000; state.ringing = false;
-    save(); show('night'); tick();
-  });
-
+    state.ringing = false;
+    state.morningUntil = Date.now() + MORNING_MIN * 60000;
+    state.target = nextOccurrence(state.wake, state.days);
+    lastSecond = -1;
+    save(); show('night'); frame();
+    // Den Klick, der zu diesem Tipp gehört, schlucken, damit er keinen Knopf auslöst
+    document.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); }, { capture: true, once: true });
+  }
+  document.addEventListener('pointerdown', stopAndRearm, true);
+  document.querySelectorAll('.days button').forEach(b => b.addEventListener('click', () => {
+    b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+    updateSetupInfo();
+  }));
   $('wakeInput').addEventListener('input', updateSetupInfo);
-
+  $('dawnInput').addEventListener('input', updateSetupInfo);
+  window.addEventListener('resize', measureSun);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      if (state.target) requestWakeLock();
-      tick();
-    }
+    if (document.visibilityState === 'visible') { if (state.target) requestWakeLock(); frame(); }
   });
 
   // ---------- Start ----------
   load();
-  makeStars();
+  buildDial(); makeStars(); measureSun();
   $('wakeInput').value = state.wake;
+  $('dawnInput').value = state.dawnMin;
+  document.querySelectorAll('.days button').forEach(b => b.setAttribute('aria-pressed', state.days.includes(Number(b.dataset.day)) ? 'true' : 'false'));
   if (state.target) {
     show(state.target - Date.now() <= 0 ? 'alarm' : 'night');
     requestWakeLock();
-    // Nach einem Neuladen braucht iOS einen Tipp, bevor Ton erlaubt ist.
     document.addEventListener('click', unlockAudio, { once: true });
   } else {
     show('setup');
   }
-  tick();
-  setInterval(tick, 1000);
+  frame();
+  requestAnimationFrame(loop);
+  setInterval(frame, 1000); // Rückfall, falls requestAnimationFrame gedrosselt wird
 
-  // Offline-Fähigkeit, wenn die App selbst gehostet wird
   if ('serviceWorker' in navigator && location.protocol === 'https:' && window.self === window.top) {
-    fetch('sw.js', { method: 'HEAD' })
-      .then(r => { if (r.ok) navigator.serviceWorker.register('sw.js'); })
-      .catch(() => {});
+    fetch('sw.js', { method: 'HEAD' }).then(r => { if (r.ok) navigator.serviceWorker.register('sw.js'); }).catch(() => {});
   }
 })();
 </script>
