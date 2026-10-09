@@ -147,6 +147,28 @@
     .face { align-items: flex-start; text-align: left; }
   }
 
+  /* ---------- Timer-Modus ---------- */
+  :root { --timer: #8a63d2; --timer-empty: rgba(138, 99, 210, .14); }
+  #timerFace { display: none; flex: 1; min-height: 0; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  #timerDial { width: min(86vw, 56vh); height: auto; display: block; }
+  #timerNow {
+    font-family: var(--serif); font-weight: 200; margin: .25em 0 0;
+    font-size: clamp(48px, 9vmin, 96px); line-height: 1; font-variant-numeric: tabular-nums;
+    font-variation-settings: "opsz" 144;
+  }
+  #timerLeft { font-family: var(--serif); font-size: clamp(24px, 4.4vmin, 44px); color: var(--text-soft); margin: .2em 0 0; font-variant-numeric: tabular-nums; }
+  body.mode-timer #timerFace { display: flex; }
+  body.mode-timer #night .face { display: none; }
+  body.mode-timer #sunWrap, body.mode-timer #glow, body.mode-timer .hill, body.mode-timer #ground { display: none; }
+  body.mode-timer #night .foot { padding-top: 1vh; }
+  #timerFace, #timerDial, #timerNow, #timerLeft { transition: opacity 1s; }
+  body.dimmed #timerDial { opacity: .35; }
+  #tlenRow[hidden], #dawnRow[hidden] { display: none; }
+  body.dimmed #timerNow, body.dimmed #timerLeft { opacity: .3; }
+  .modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.2em; }
+  .modes button { min-height: 48px; padding: 10px 20px; font-size: 17px; border-color: rgba(201, 207, 230, .25); color: var(--moon-dim); }
+  .modes button[aria-pressed="true"] { background: rgba(201, 207, 230, .16); border-color: var(--moon); color: var(--moon); font-weight: 600; }
+
   /* Gedimmt: Inhalt fast unsichtbar, Himmel und Sonne stark abgedunkelt */
   #sky { transition: filter 1s; }
   #night .face, #night .line, #night .foot, #fsBtn, #dial, #digital { transition: opacity 1s; }
@@ -184,8 +206,14 @@
   <section id="setup" class="screen">
     <label class="field-label" for="wakeInput">Aufstehen um</label>
     <input id="wakeInput" type="time" value="06:30" required>
-    <div class="dawn-row">
-      <label for="dawnInput">Sonnenaufgang dauert</label>
+    <div class="modes" role="group" aria-label="Anzeige">
+      <button type="button" data-mode="sun">Sonnenaufgang</button><button type="button" data-mode="timer">Timer</button>
+    </div>
+    <div class="modes" id="tlenRow" role="group" aria-label="Timer-Länge">
+      <button type="button" data-tlen="wake">Bis zur Weckzeit</button><button type="button" data-tlen="fixed">Feste Dauer</button>
+    </div>
+    <div class="dawn-row" id="dawnRow">
+      <label for="dawnInput" id="dawnLabel">Sonnenaufgang dauert</label>
       <input id="dawnInput" type="number" inputmode="numeric" min="1" max="240" step="1" value="60">
       <span>Minuten</span>
     </div>
@@ -210,7 +238,20 @@
       <p id="digital"></p>
       <p class="line" id="wakeLine"></p>
     </div>
+    <div id="timerFace">
+      <svg id="timerDial" viewBox="-102 -102 204 204" role="img" aria-label="Timer bis zum Aufstehen">
+        <circle r="96" fill="var(--timer-empty)"/>
+        <circle id="timerFull" r="96" fill="var(--timer)"/>
+        <path id="timerWedge" fill="var(--timer)" d=""/>
+        <g id="timerSegs" stroke="#fff" stroke-width=".9" stroke-opacity=".9" stroke-linecap="round"></g>
+        <circle r="96" fill="none" stroke="#fff" stroke-width="1.6" stroke-opacity=".9"/>
+        <circle r="2.5" fill="#fff"/>
+      </svg>
+      <p id="timerNow"></p>
+      <p id="timerLeft"></p>
+    </div>
     <div class="foot">
+      <button id="modeBtn" class="night-only">Timer</button>
       <button id="dimBtn" class="night-only">Dimmen</button>
       <button id="cancelBtn" class="night-only">Wecker beenden</button>
       <p class="alarm-only tap-hint">Tippe irgendwo auf den Bildschirm, um den Wecker auszuschalten.</p>
@@ -223,7 +264,8 @@
 (() => {
   const $ = id => document.getElementById(id);
   const KEY = 'morgenrot-state';
-  let state = { wake: '06:30', dawnMin: 60, days: [1, 2, 3, 4, 5], target: null, ringing: false, morningUntil: 0 };
+  let state = { wake: '06:30', dawnMin: 60, days: [1, 2, 3, 4, 5], mode: 'sun', tlen: 'wake', timerStart: 0, target: null, ringing: false, morningUntil: 0 };
+  let timerSegCount = 0, lastWedge = null;
   const MORNING_MIN = 30;      // so lange bleibt der Morgenhimmel nach dem Ausschalten
   const MISSED_MAX_MIN = 60;   // verpasste Wecker, die älter sind, werden still übersprungen
   const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -235,6 +277,8 @@
     try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.wake) state = Object.assign(state, s); } catch (e) {}
     if (!(state.dawnMin >= 1)) state.dawnMin = 60;
     if (!Array.isArray(state.days)) state.days = [1, 2, 3, 4, 5];
+    if (state.mode !== 'timer') state.mode = 'sun';
+    if (state.tlen !== 'fixed') state.tlen = 'wake';
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
 
@@ -406,6 +450,61 @@
   }
   function stopAlarm() { clearInterval(alarmTimer); alarmTimer = null; }
 
+  // ---------- Timer ----------
+  function buildTimer(n) {
+    if (n === timerSegCount) return;
+    timerSegCount = n; lastWedge = null;
+    const g = $('timerSegs'), NS = 'http://www.w3.org/2000/svg';
+    g.innerHTML = '';
+    if (n < 2) return;
+    const step = [1, 5, 10, 15, 30, 60].find(x => n / x <= 120) || 60;
+    const lines = Math.ceil(n / step);
+    for (let k = 0; k < lines; k++) {
+      const i = k * step;
+      const a = i / n * 2 * Math.PI, l = document.createElementNS(NS, 'line');
+      l.setAttribute('x1', '0'); l.setAttribute('y1', '0');
+      l.setAttribute('x2', (Math.sin(a) * 96).toFixed(2)); l.setAttribute('y2', (-Math.cos(a) * 96).toFixed(2));
+      g.appendChild(l);
+    }
+  }
+  // Lila Fläche = verbleibende Zeit. Der abgelaufene Teil wächst im Uhrzeigersinn ab 12 Uhr.
+  function setTimer(frac) {
+    const f = Math.min(1, Math.max(0, frac));
+    const key = Math.round(f * 20000);
+    if (key === lastWedge) return;
+    lastWedge = key;
+    $('timerFull').style.display = f >= 1 ? '' : 'none';
+    if (f <= 0 || f >= 1) { $('timerWedge').setAttribute('d', ''); return; }
+    const a = (1 - f) * 2 * Math.PI, x = Math.sin(a) * 96, y = -Math.cos(a) * 96;
+    $('timerWedge').setAttribute('d', `M0 0 L${x.toFixed(3)} ${y.toFixed(3)} A96 96 0 ${f > .5 ? 1 : 0} 1 0 -96 Z`);
+  }
+  // Gesamtdauer des Timers in ms: bis zur Weckzeit (ab Start/Neustart) oder feste Dauer
+  function timerSpan() {
+    if (state.tlen === 'fixed' || !state.target) return state.dawnMin * 60000;
+    const start = state.timerStart && state.timerStart < state.target ? state.timerStart : Date.now();
+    return Math.max(60000, state.target - start);
+  }
+  function restartTimer() {
+    state.timerStart = Date.now(); save();
+    lastWedge = null; buildTimer(Math.max(1, Math.round(timerSpan() / 60000)));
+  }
+  function clockText(ms) {
+    const t = Math.max(0, Math.ceil(ms / 1000));
+    const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), sec = t % 60;
+    return h > 0 ? h + ':' + pad(m) + ':' + pad(sec) : pad(m) + ':' + pad(sec);
+  }
+  function applyMode() {
+    const timer = state.mode === 'timer';
+    document.body.classList.toggle('mode-timer', timer);
+    $('modeBtn').textContent = timer ? 'Sonnenaufgang' : 'Timer';
+    document.querySelectorAll('.modes button[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === state.mode ? 'true' : 'false'));
+    document.querySelectorAll('#tlenRow button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tlen === state.tlen ? 'true' : 'false'));
+    syncSetupRows();
+    buildTimer(Math.max(1, Math.round(timerSpan() / 60000)));
+    lastSky = null; lastSunY = null; lastWedge = null; lastSecond = -1;
+    if (state.ringing) show('alarm');
+  }
+
   // ---------- Bildschirme ----------
   function show(id) {
     const ringing = id === 'alarm';
@@ -413,15 +512,20 @@
     ['setup', 'night'].forEach(s => $(s).classList.toggle('on', s === id));
     document.body.classList.toggle('ringing', ringing);
     if (ringing || id !== 'night') document.body.classList.remove('dimmed');
-    if (ringing) $('wakeLine').textContent = 'Die Sonne ist aufgegangen. Zeit zum Aufstehen!';
+    if (ringing) $('wakeLine').textContent = state.mode === 'timer' ? 'Der Timer ist abgelaufen. Zeit zum Aufstehen!' : 'Die Sonne ist aufgegangen. Zeit zum Aufstehen!';
+    if (ringing) $('timerLeft').textContent = 'Zeit zum Aufstehen!';
   }
   function updateSetupInfo() {
     const days = selectedDays();
     if (!days.length) { $('setupInfo').textContent = 'Wähle mindestens einen Wochentag aus.'; return; }
     const t = nextOccurrence($('wakeInput').value || state.wake, days);
     const startDawn = new Date(t - dawnMinutes() * 60000);
-    $('setupInfo').textContent = 'Nächster Wecker ' + dayLabel(t) + ' um ' + hhmm(new Date(t)) + ' Uhr, ab ' + hhmm(startDawn) +
-      ' Uhr wird es hell. Das iPad über Nacht am Ladekabel und die App offen lassen.';
+    const head = 'Nächster Wecker ' + dayLabel(t) + ' um ' + hhmm(new Date(t)) + ' Uhr';
+    let what;
+    if (selectedMode() !== 'timer') what = ', ab ' + hhmm(startDawn) + ' Uhr wird es hell.';
+    else if (selectedTlen() === 'wake') what = '. Der Timer zeigt die ' + Math.round((t - Date.now()) / 60000) + ' Minuten bis dahin. Tippen startet ihn neu.';
+    else what = ', ab ' + hhmm(startDawn) + ' Uhr läuft der Timer.';
+    $('setupInfo').textContent = head + what + ' Das iPad über Nacht am Ladekabel und die App offen lassen.';
   }
 
   // ---------- Hauptschleife ----------
@@ -429,20 +533,28 @@
     const now = Date.now();
     if (state.target && !state.ringing && state.target - now < -MISSED_MAX_MIN * 60000) {
       // App war zur Weckzeit nicht offen: nicht nachträglich klingeln, sondern den nächsten Termin nehmen
-      state.target = nextOccurrence(state.wake, state.days); save();
+      state.target = nextOccurrence(state.wake, state.days); state.timerStart = now; save();
     }
+    const timer = state.mode === 'timer';
     if (state.target && state.morningUntil > now && !state.ringing) {
-      paintSky(1); placeSun(-sunPx * 0.4);
+      if (timer) { paintSky(0); setTimer(0); } else { paintSky(1); placeSun(-sunPx * 0.4); }
     } else if (state.target) {
       const left = state.target - now, dawnMs = state.dawnMin * 60000;
-      paintSky(Math.min(1, Math.max(0, 1 - left / dawnMs)));
-      placeSun(sunOffsetPx(left, dawnMs));
+      if (timer) {
+        const span = timerSpan();
+        buildTimer(Math.max(1, Math.round(span / 60000)));
+        paintSky(0); setTimer(left / span);
+      }
+      else {
+        paintSky(Math.min(1, Math.max(0, 1 - left / dawnMs)));
+        placeSun(sunOffsetPx(left, dawnMs));
+      }
       if (left <= 0 && !alarmTimer) {
         state.ringing = true; save();
         show('alarm'); startAlarm();
       }
     } else {
-      paintSky(0); placeSun(sunPx + 60);
+      paintSky(0); placeSun(sunPx + 60); setTimer(1);
     }
 
     const sec = Math.floor(now / 1000);
@@ -451,9 +563,13 @@
       const d = new Date(now);
       setDial(d);
       $('digital').textContent = hhmm(d);
+      $('timerNow').textContent = hhmm(d);
       if (state.target && state.target > now) {
         const next = 'Nächster Wecker ' + dayLabel(state.target) + ' um ' + hhmm(new Date(state.target)) + ', noch ' + durationText(state.target - now);
         $('wakeLine').textContent = state.morningUntil > now ? 'Guten Morgen! ' + next : next;
+        $('timerLeft').textContent = state.morningUntil > now
+          ? 'Guten Morgen! Nächster Wecker ' + dayLabel(state.target) + ' um ' + hhmm(new Date(state.target))
+          : 'noch ' + clockText(state.target - now);
       }
       if (!state.target) updateSetupInfo();
     }
@@ -468,6 +584,7 @@
     const days = selectedDays();
     if (!days.length) { $('setupInfo').textContent = 'Wähle mindestens einen Wochentag aus.'; return; }
     state.wake = v; state.days = days; state.dawnMin = dawnMinutes(); $('dawnInput').value = state.dawnMin;
+    state.mode = selectedMode(); state.tlen = selectedTlen(); state.timerStart = Date.now(); applyMode();
     state.target = nextOccurrence(v, days); state.ringing = false; state.morningUntil = 0;
     save(); requestWakeLock(); show('night'); frame();
   });
@@ -477,6 +594,11 @@
   });
   $('dimBtn').addEventListener('click', e => { e.stopPropagation(); document.body.classList.add('dimmed'); });
   document.addEventListener('click', e => {
+    const onButton = e.target.closest && e.target.closest('button');
+    if (!onButton && state.mode === 'timer' && state.tlen === 'wake' && state.target && !state.ringing &&
+        !(state.morningUntil > Date.now()) && $('night').classList.contains('on')) {
+      restartTimer(); frame();
+    }
     if (document.body.classList.contains('dimmed') && e.target.id !== 'dimBtn') document.body.classList.remove('dimmed');
   });
   // Ein Tipp irgendwo beendet das Klingeln und stellt sofort den nächsten Wecker.
@@ -487,6 +609,7 @@
     state.ringing = false;
     state.morningUntil = Date.now() + MORNING_MIN * 60000;
     state.target = nextOccurrence(state.wake, state.days);
+    state.timerStart = state.morningUntil;
     lastSecond = -1;
     save(); show('night'); frame();
     // Den Klick, der zu diesem Tipp gehört, schlucken, damit er keinen Knopf auslöst
@@ -497,6 +620,33 @@
     b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
     updateSetupInfo();
   }));
+  function selectedMode() {
+    const b = document.querySelector('.modes button[aria-pressed="true"]');
+    return b ? b.dataset.mode : state.mode;
+  }
+  function selectedTlen() {
+    const b = document.querySelector('#tlenRow button[aria-pressed="true"]');
+    return b ? b.dataset.tlen : state.tlen;
+  }
+  function syncSetupRows() {
+    const timer = selectedMode() === 'timer', fixed = selectedTlen() === 'fixed';
+    $('tlenRow').hidden = !timer;
+    $('dawnRow').hidden = timer && !fixed;
+    $('dawnLabel').textContent = timer ? 'Timer läuft' : 'Sonnenaufgang dauert';
+  }
+  document.querySelectorAll('.modes button[data-mode]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.modes button[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    syncSetupRows(); updateSetupInfo();
+  }));
+  document.querySelectorAll('#tlenRow button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#tlenRow button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    syncSetupRows(); updateSetupInfo();
+  }));
+  $('modeBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    state.mode = state.mode === 'timer' ? 'sun' : 'timer';
+    save(); applyMode(); frame();
+  });
   $('wakeInput').addEventListener('input', updateSetupInfo);
   $('dawnInput').addEventListener('input', updateSetupInfo);
   window.addEventListener('resize', measureSun);
@@ -510,6 +660,7 @@
   $('wakeInput').value = state.wake;
   $('dawnInput').value = state.dawnMin;
   document.querySelectorAll('.days button').forEach(b => b.setAttribute('aria-pressed', state.days.includes(Number(b.dataset.day)) ? 'true' : 'false'));
+  applyMode();
   if (state.target) {
     show(state.target - Date.now() <= 0 ? 'alarm' : 'night');
     requestWakeLock();
