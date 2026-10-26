@@ -180,6 +180,10 @@
   #light { position: fixed; inset: 0; z-index: 0; background: #000; display: none; transition: filter 1s; }
   body.mode-light #light { display: block; }
   body.dimmed #light { filter: brightness(.3); }
+  body:not(.kind2) #skipBtn { display: none; }
+  /* Bildschirm "aus": komplett schwarz, ein Tipp schaltet ihn wieder an */
+  #sleepCover { position: fixed; inset: 0; z-index: 3; background: #000; display: none; cursor: pointer; }
+  body.sleep #sleepCover { display: block; }
   /* Vor und während des Hellwerdens nur Licht: Inhalt ausgeblendet, ein Tipp zeigt ihn kurz */
   body.lightonly:not(.peek) main, body.lightonly:not(.peek) #fsBtn { opacity: 0; pointer-events: none; }
   body.mode-light #night .face { align-items: center; text-align: center; }
@@ -210,6 +214,7 @@
   body.dawn { --text: #1d2140; --text-soft: rgba(29, 33, 64, .7); }
   body.dawn #fsBtn { border-color: rgba(29, 33, 64, .3); }
   body.dawn .tap-hint { color: #1d2140; }
+  body.dawn #night .foot button { color: rgba(29, 33, 64, .8); border-color: rgba(29, 33, 64, .3); }
   /* Im gedimmten Zustand bleibt die Schrift hell, weil der Himmel dunkel bleibt */
   body.dimmed.dawn, body.dimmed { --text: var(--moon); --text-soft: var(--moon-dim); }
 </style>
@@ -225,6 +230,7 @@
 </div>
 
 <div id="light" aria-hidden="true"></div>
+<div id="sleepCover" aria-hidden="true"></div>
 
 <button id="fsBtn" hidden>Vollbild</button>
 
@@ -294,6 +300,7 @@
     </div>
     <div class="foot">
       <button id="modeBtn" class="night-only">Timer</button>
+      <button id="skipBtn" class="night-only">Lichtwecker überspringen</button>
       <button id="dimBtn" class="night-only">Dimmen</button>
       <button id="cancelBtn" class="night-only">Wecker beenden</button>
       <p class="alarm-only tap-hint">Tippe irgendwo auf den Bildschirm, um den Wecker auszuschalten.</p>
@@ -310,7 +317,8 @@
     w2: { on: false, time: '07:00', fadeMin: 20, days: [1, 2, 3, 4, 5], sound: true } };
   let lastLight = null, peekTimer = null;
   let timerSegCount = 0, lastWedge = null;
-  const MORNING_MIN = 30;      // so lange bleibt der Morgenhimmel nach dem Ausschalten
+  const MORNING_MIN = 30;      // so lange bleibt der Morgen nach dem Lichtwecker
+  const SLEEP_AFTER_MIN = 15;  // so lange nach der ersten Weckzeit, dann wird der Bildschirm schwarz
   const MISSED_MAX_MIN = 60;   // verpasste Wecker, die älter sind, werden still übersprungen
   const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
   let audioCtx = null, alarmTimer = null, alarmStarted = 0, wakeLock = null;
@@ -333,11 +341,12 @@
   // ---------- Zeit ----------
   const pad = n => String(n).padStart(2, '0');
   const hhmm = d => pad(d.getHours()) + ':' + pad(d.getMinutes());
-  function nextOccurrence(t, days) {
+  function nextOccurrence(t, days, after) {
     const [h, m] = t.split(':').map(Number);
-    for (let i = 0; i <= 7; i++) {
+    const from = Math.max(Date.now(), after || 0);
+    for (let i = 0; i <= 8; i++) {
       const d = new Date(); d.setDate(d.getDate() + i); d.setHours(h, m, 0, 0);
-      if (d.getTime() > Date.now() && days.includes(d.getDay())) return d.getTime();
+      if (d.getTime() > from && days.includes(d.getDay())) return d.getTime();
     }
     return null;
   }
@@ -357,7 +366,7 @@
   // Nächster Termin aus beiden Weckzeiten; bei gleicher Uhrzeit gewinnt die erste.
   function nextEvent(cfg) {
     const a = cfg.days.length ? nextOccurrence(cfg.wake, cfg.days) : null;
-    const b = cfg.w2.on && cfg.w2.days.length ? nextOccurrence(cfg.w2.time, cfg.w2.days) : null;
+    const b = cfg.w2.on && cfg.w2.days.length ? nextOccurrence(cfg.w2.time, cfg.w2.days, cfg.skipW2) : null;
     if (b != null && (a == null || b < a)) return { t: b, kind: 2 };
     return { t: a, kind: 1 };
   }
@@ -622,6 +631,16 @@
       // App war zur Weckzeit nicht offen: nicht nachträglich klingeln, sondern den nächsten Termin nehmen
       setNext(); state.timerStart = now; save();
     }
+    // Niemand hat getippt: 15 Min. nach der ersten Weckzeit Klingeln beenden und Bildschirm aus
+    if (state.ringing && state.kind === 1 && state.target && now - state.target >= SLEEP_AFTER_MIN * 60000) {
+      stopAlarm(); state.ringing = false; state.lastKind = 1;
+      setNext(); state.morningUntil = 0; state.sleepAt = 0; state.sleep = true; state.timerStart = now;
+      save(); show('night');
+    }
+    if (state.sleepAt && now >= state.sleepAt) { state.sleepAt = 0; state.sleep = true; save(); }
+    // Wieder an, sobald der nächste Sonnenaufgang, fester Timer oder Lichtwecker beginnt
+    if (state.sleep && (!state.target || state.kind === 2 || state.ringing || now >= phaseStart())) { state.sleep = false; save(); }
+    document.body.classList.toggle('sleep', !!state.sleep && $('night').classList.contains('on'));
     const kind2 = !!state.target && state.kind === 2;
     // Nach dem Ausschalten bleibt der Morgen stehen, bis der nächste Termin sichtbar beginnt.
     const morning = !!state.target && state.morningUntil > now && !state.ringing && now < phaseStart();
@@ -629,6 +648,7 @@
     document.body.classList.toggle('mode-timer', state.mode === 'timer' && !(kind2 && !morning) && !(morning && state.lastKind === 2));
     const lightView = (kind2 && !morning) || (morning && state.lastKind === 2);
     document.body.classList.toggle('mode-light', lightView);
+    document.body.classList.toggle('kind2', kind2 && !morning);
     document.body.classList.toggle('lightonly', lightView && !morning && !state.ringing && $('night').classList.contains('on'));
     if (lightView) {
       paintSky(0); placeSun(sunPx + 60);
@@ -643,7 +663,7 @@
         }
       }
       paintLight(level);
-      document.body.classList.toggle('dawn', level > 0.6 && !document.body.classList.contains('dimmed'));
+      document.body.classList.toggle('dawn', level > 0.4 && !document.body.classList.contains('dimmed'));
       lastSky = null;
     } else if (state.target && morning) {
       if (timer) { paintSky(0); setTimer(0); } else { paintSky(1); placeSun(-sunPx * 0.4); }
@@ -699,16 +719,31 @@
     if (w2on && !selectedDays2().length) { $('setupInfo').textContent = 'Wähle für die zweite Weckzeit mindestens einen Wochentag aus.'; return; }
     state.w2 = { on: w2on, time: $('w2Time').value || state.w2.time, fadeMin: w2FadeMinutes(), days: selectedDays2(), sound: $('w2Sound').checked };
     $('w2Fade').value = state.w2.fadeMin;
-    setNext(); state.ringing = false; state.morningUntil = 0; state.lastKind = 0;
+    state.skipW2 = 0; state.sleep = false; state.sleepAt = 0; setNext(); state.ringing = false; state.morningUntil = 0; state.lastKind = 0;
     save(); requestWakeLock(); show('night'); frame();
   });
   $('cancelBtn').addEventListener('click', () => {
-    state.target = null; state.ringing = false; state.morningUntil = 0;
+    state.target = null; state.ringing = false; state.morningUntil = 0; state.sleep = false; state.sleepAt = 0;
     save(); releaseWakeLock(); show('setup'); frame();
+  });
+  $('skipBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (state.kind !== 2 || !state.target) return;
+    state.skipW2 = state.target;              // nur diesen einen Termin auslassen
+    setNext(); state.timerStart = Date.now(); state.morningUntil = 0; state.lastKind = 0;
+    document.body.classList.remove('peek'); clearTimeout(peekTimer);
+    lastSecond = -1; lastWedge = null; save(); frame();
   });
   $('dimBtn').addEventListener('click', e => { e.stopPropagation(); document.body.classList.add('dimmed'); });
   document.addEventListener('click', e => {
     const onButton = e.target.closest && e.target.closest('button');
+    if (document.body.classList.contains('sleep')) {
+      e.preventDefault(); e.stopPropagation();
+      state.sleep = false; state.sleepAt = 0; state.morningUntil = 0;
+      if (state.mode === 'timer' && state.tlen === 'wake' && state.kind === 1) restartTimer();
+      lastSecond = -1; save(); frame();
+      return;
+    }
     if (document.body.classList.contains('lightonly')) {
       // Schwarzer Bildschirm: ein Tipp zeigt Uhr und Knöpfe für 10 Sekunden
       if (!document.body.classList.contains('peek')) { e.preventDefault(); e.stopPropagation(); }
@@ -729,10 +764,21 @@
     e.preventDefault(); e.stopPropagation();
     stopAlarm();
     state.ringing = false;
-    state.morningUntil = Date.now() + MORNING_MIN * 60000;
+    const rangAt = state.target || Date.now();
     state.lastKind = state.kind;
+    if (state.kind === 1) {
+      // Erste Weckzeit: Morgen bleibt bis 15 Min. nach der Weckzeit, dann Bildschirm aus
+      state.morningUntil = Math.max(Date.now(), rangAt + SLEEP_AFTER_MIN * 60000);
+      state.sleepAt = state.morningUntil;
+    } else {
+      state.morningUntil = Date.now() + MORNING_MIN * 60000;
+    }
     setNext();
     state.timerStart = state.morningUntil;
+    if (state.lastKind === 2 && state.kind === 1 && state.target - Date.now() < 12 * 3600000) {
+      // Erster Wecker folgt am selben Morgen: sofort Timer bzw. Sonnenaufgang zeigen
+      state.morningUntil = 0; state.lastKind = 0; state.timerStart = Date.now();
+    }
     lastSecond = -1;
     save(); show('night'); frame();
     // Den Klick, der zu diesem Tipp gehört, schlucken, damit er keinen Knopf auslöst

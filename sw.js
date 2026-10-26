@@ -1,4 +1,4 @@
-const CACHE = 'morgenrot-v11';
+const CACHE = 'morgenrot-v13';
 const CORE = ['./', 'index.html'];
 const EXTRA = ['manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
